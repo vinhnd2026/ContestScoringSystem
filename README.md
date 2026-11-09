@@ -2,7 +2,50 @@
 
 Hệ thống chấm điểm cuộc thi **chạy offline trên mạng LAN tại hiện trường**: một máy của Ban tổ chức chạy toàn bộ hệ thống (backend Go đóng gói thành 1 file binary + database SQLite), giám khảo chấm điểm bằng tablet/điện thoại theo thời gian thực, điểm được điều hành, khóa và công bố ngay trong sự kiện — **không cần internet**.
 
-> Trạng thái tài liệu: **PRD v2 — bản hoàn chỉnh** (thay thế bản ý tưởng v1). Repo này hiện chứa bộ tài liệu thiết kế; phần code được triển khai theo đúng thứ tự đề xuất ở cuối trang.
+> Trạng thái tài liệu: **PRD v2 — bản hoàn chỉnh** (thay thế bản ý tưởng v1). **Chương trình MVP Phase 1 đã được viết và kiểm chứng chạy thật** — xem mục "Chương trình (code)" ngay dưới đây; bộ tài liệu thiết kế vẫn là đặc tả chuẩn cho mọi thay đổi tiếp theo.
+
+## Chương trình (code) — MVP Phase 1
+
+Mã nguồn nằm cùng cấp với tài liệu trong repo này: backend Go (9 file `*.go`), frontend Vue 3 SPA trong `web/` (Vue được vendor tại `web/vendor/vue.global.prod.js` để chạy offline hoàn toàn), toàn bộ web assets được `go:embed` vào binary.
+
+### Cách build và chạy
+
+```bash
+# Cần Go >= 1.23 (không cần CGO)
+go build -o contest-scoring .
+./contest-scoring -port 8080 -db contest.db
+# Mở http://localhost:8080 — trên LAN dùng địa chỉ server in ra ở console
+```
+
+Binary tự tạo file SQLite (WAL) + thư mục `backups/` cạnh file db, tự seed dữ liệu mẫu khi DB trống.
+
+### Tài khoản mẫu (seed khi DB trống) — PHẢI đổi trước khi thi thật
+
+| Tài khoản | Mật khẩu/PIN | Vai trò |
+|---|---|---|
+| `admin` | `admin123` | Admin / Trưởng ban |
+| `judge1` / `judge2` / `judge3` | `1111` / `2222` / `3333` | Giám khảo (đăng nhập bằng PIN cũng là mật khẩu) |
+| `mc` | `mc123` | MC / màn hình khán giả |
+
+Kèm 1 contest mẫu ở trạng thái `pending`: 1 vòng chung kết, 4 đội, nhóm tiêu chí mẫu (Range 0–10; Discrete có weight ×2; 1 tiêu chí Admin-Only; 1 tiêu chí trừ giờ), phân công all-to-all cho 3 giám khảo — mở lên là tổng duyệt (Dry Run) được ngay. Tổng điểm tối đa của contest mẫu: 40.
+
+### Phạm vi đã làm (đã kiểm chứng đầu-cuối bằng server thật)
+
+- Đăng nhập/session cookie HttpOnly, 3 vai trò, khóa đăng nhập sau 5 lần sai, Admin tạo/vô hiệu hóa/reset mật khẩu-PIN (ghi audit), đổi mật khẩu của chính mình.
+- Contest CRUD + state machine `pending → active → completed` + chốt sổ/mở chốt (có lý do), checklist kích hoạt, khóa cấu hình khi active, Clone (cấu hình, không điểm), Reset điểm.
+- Round/Team CRUD (SBD duy nhất trong contest, tạo team tự sinh performance `pending`), **import đội bằng CSV** có báo lỗi theo dòng, bốc thăm thứ tự thi.
+- Criteria Engine: nhóm + tiêu chí `range`/`discrete`, `weight` là thuộc tính, options cho discrete, `total_max_score = Σ(max × weight)` (không tính Admin-Only) hiển thị trực tiếp.
+- Assignment matrix: all-to-all và gán chọn lọc.
+- Flow control + timer server: bắt đầu/tạm dừng/tiếp tục/kết thúc, đếm lố giờ, đề xuất trừ điểm theo công thức khoảng lố có trần — Admin duyệt/sửa/từ chối có lý do mới áp vào tiêu chí trừ giờ; khóa điểm (khóa thiếu phải có lý do), mở khóa, reveal/unreveal từng đội và reveal bảng xếp hạng riêng.
+- Judge Workspace: tự đồng bộ đội đang thi (WebSocket + poll), chỉ giám khảo được phân công mới ghi điểm được (API trả `403 NOT_ASSIGNED`), nháp IndexedDB theo giám khảo × performance + đồng bộ draft lên server, nộp/sửa điểm (sửa sau nộp bắt buộc lý do, ghi audit), progress tracker, chống nộp trùng bằng `client_uuid` + optimistic locking `version` (xung đột trả `409`).
+- Admin Dashboard: Live Matrix realtime, xem chi tiết phiếu, override có lý do (giữ giá trị cũ trong audit), audit log append-only có lọc/phân trang.
+- Leaderboard theo round đúng PRD 6.6.5: trung bình phiếu hợp lệ, bỏ cao nhất/thấp nhất chỉ khi đủ `min_judges_for_trim` (mặc định 5, tối thiểu 4) và có ghi chú khi không áp dụng, cộng Admin-Only một lần, highlight đồng điểm, tie-breaker bằng tiêu chí cấu hình hoặc Admin chốt thủ công có lý do.
+- Public/MC View: chỉ thấy timer, đội đang thi và điểm/BXH **đã reveal** — chặn ở API (`public-state`), không chỉ ẩn giao diện.
+- Backup bằng snapshot `VACUUM INTO` + tải xuống; restore từ file tải lên (tự tạo snapshot `pre_restore` trước, chặn khi đang có đội `performing`); auto-backup khi khóa điểm và khi kết thúc contest. Xuất Excel `.xlsx` thật gồm 4 sheet (Tổng hợp, Chi tiết, Admin-Only, Audit).
+
+### Để Phase 2 (chưa làm, theo đúng PRD)
+
+- **Import đội bằng Excel `.xlsx`** (Phase 1 dùng CSV + có file mẫu template .xlsx để tải xuống), xuất PDF biên bản, QR code join trên dashboard (hiện server in địa chỉ LAN ra console), PWA/native, ngôn ngữ thứ ba, multi-site, thống kê sau sự kiện.
 
 ## Tóm tắt dự án
 
