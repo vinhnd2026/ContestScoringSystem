@@ -519,4 +519,4 @@ createApp({
       </div>
     </main>
   </div>`
-});
+}).mount('#app');
