@@ -19,6 +19,18 @@ go build -o contest-scoring .
 
 Binary tự tạo file SQLite (WAL) + thư mục `backups/` cạnh file db, tự seed dữ liệu mẫu khi DB trống.
 
+### Build offline bằng thư viện đóng kèm (vendor)
+
+Thư mục `vendor/` trong dự án chứa **toàn bộ thư viện Go** mà chương trình cần (SQLite thuần Go, WebSocket, bcrypt…), đóng gói bằng `go mod vendor`. Nhờ vậy việc build **không cần internet**: máy build không tải được thư viện từ proxy Go vẫn build bình thường, và khi build bằng vendor thì **không cần tới `go.sum`** (Go đối chiếu thư viện theo `vendor/modules.txt`).
+
+Cách build offline:
+
+- **Windows:** chạy `build.bat` — file này tự đặt `GOFLAGS=-mod=vendor` và `GOPROXY=off` rồi `go build -o contest-scoring.exe .`
+- **Linux/macOS:** chạy `./build.sh` — tương tự, cho ra file `contest-scoring`.
+- **Gõ tay:** `go build -mod=vendor .` ngay trong thư mục dự án.
+
+Yêu cầu duy nhất còn lại là máy đã cài sẵn Go >= 1.23. Lưu ý: đừng xóa hay sửa tay thư mục `vendor/` và file `vendor/modules.txt` — chúng phải khớp với `go.mod` thì Go mới cho build bằng vendor.
+
 ### Tài khoản mẫu (seed khi DB trống) — PHẢI đổi trước khi thi thật
 
 | Tài khoản | Mật khẩu/PIN | Vai trò |
