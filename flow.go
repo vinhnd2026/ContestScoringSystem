@@ -226,7 +226,7 @@ func (s *Server) handleLeaderboardReveal(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
-func (s *Server) ensureAdminSheet(perfID, actorID int64) int64 {
+func (s *Server) ensureAdminSheet(perfID, _ int64) int64 {
 	var id int64
 	err := s.h.QueryRow(`SELECT id FROM scores WHERE performance_id=? AND is_admin_sheet=1`, perfID).Scan(&id)
 	if err == nil {
@@ -401,16 +401,17 @@ func (s *Server) handleUpsertScore(w http.ResponseWriter, r *http.Request, u *Us
 		return
 	}
 	adminSheet := false
-	if u.Role == "admin" {
+	switch u.Role {
+	case "admin":
 		adminSheet = true
-	} else if u.Role == "judge" {
+	case "judge":
 		var assigned int
 		_ = s.h.QueryRow(`SELECT COUNT(*) FROM assignments WHERE performance_id=? AND judge_id=?`, in.PerformanceID, u.ID).Scan(&assigned)
 		if assigned == 0 {
 			writeErr(w, 403, "NOT_ASSIGNED", "Bạn không được phân công chấm phần thi này.", nil)
 			return
 		}
-	} else {
+	default:
 		writeErr(w, 403, "FORBIDDEN", "Vai trò của bạn không ghi điểm được.", nil)
 		return
 	}

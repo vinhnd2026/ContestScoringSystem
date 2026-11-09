@@ -263,7 +263,7 @@ func (s *Server) handleCriterionByID(w http.ResponseWriter, r *http.Request, u *
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
-func (s *Server) handleCreateOption(w http.ResponseWriter, r *http.Request, u *User, critID int64) {
+func (s *Server) handleCreateOption(w http.ResponseWriter, r *http.Request, _ *User, critID int64) {
 	cid := s.contestOfCriterion(critID)
 	if !s.configEditable(w, cid) {
 		return

@@ -182,9 +182,10 @@ func (s *Server) contestSub(w http.ResponseWriter, r *http.Request, auth, admin 
 		return
 	}
 	if len(parts) == 1 {
-		if r.Method == http.MethodGet {
+		switch r.Method {
+		case http.MethodGet:
 			auth(s.handleGetContest)(w, r)
-		} else if r.Method == http.MethodPatch {
+		case http.MethodPatch:
 			admin(s.handlePatchContest)(w, r)
 		}
 		return

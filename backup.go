@@ -77,7 +77,7 @@ func (s *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request, u *U
 	audit(s.h, u.ID, "backup.create", "backup", id, nil, "", "", "Backup thủ công")
 	writeJSON(w, 201, map[string]any{"backup_id": id})
 }
-func (s *Server) handleDownloadBackup(w http.ResponseWriter, r *http.Request, u *User) {
+func (s *Server) handleDownloadBackup(w http.ResponseWriter, r *http.Request, _ *User) {
 	id := pathID(r, "/api/v1/backups/")
 	var name string
 	if err := s.h.QueryRow(`SELECT file_name FROM backups WHERE id=?`, id).Scan(&name); err != nil {
