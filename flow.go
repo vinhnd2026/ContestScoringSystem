@@ -419,6 +419,10 @@ func (s *Server) handleUpsertScore(w http.ResponseWriter, r *http.Request, u *Us
 		writeErr(w, 409, "SCORE_LOCKED", "Phần thi đã khóa điểm.", nil)
 		return
 	}
+	if p.Status != "performing" && p.Status != "scoring" {
+		writeErr(w, 409, "PERFORMANCE_NOT_ACTIVE", "Đội này chưa bắt đầu thi — chỉ chấm được đội đang thi hoặc đang trong giai đoạn chấm.", nil)
+		return
+	}
 	if msg, _ := s.validateDetails(p.ContestID, in.Details, adminSheet, in.Submit); msg != "" {
 		writeErr(w, 422, "VALIDATION_ERROR", msg, nil)
 		return
