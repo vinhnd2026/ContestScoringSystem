@@ -500,8 +500,8 @@ createApp({
       <div v-else-if="user.role==='mc'">
         <div class="card center" v-if="publicState">
           <h1>{{ pick(publicState.contest,'name') }}</h1>
-          <div v-if="publicState.current_performance">
-            <p><span class="badge" style="font-size:1.1rem">🔴 {{ t.current }}</span></p>
+          <div v-if="publicState.current_performance" class="stage">
+            <p><span class="badge live" style="font-size:1.1rem">🔴 {{ t.current }}</span></p>
             <h2 style="font-size:2rem">{{ publicState.current_performance.team_code }} — {{ pick(publicState.current_performance,'team_name') }}</h2>
             <div class="big">{{ fmt(((timerInfo[publicState.current_performance.id]||{}).overtime_sec>0) ? (timerInfo[publicState.current_performance.id]||{}).overtime_sec : ((timerInfo[publicState.current_performance.id]||{}).remaining_sec!=null ? (timerInfo[publicState.current_performance.id]).remaining_sec : publicState.current_performance.remaining_sec)) }}</div>
             <p v-if="((timerInfo[publicState.current_performance.id]||{}).overtime_sec>0)">⏰ ĐANG LỐ GIỜ</p>
