@@ -132,7 +132,7 @@ createApp({
         if (!user.value) return;
         try {
           if (user.value.role === 'mc') await loadPublic();
-          else if (user.value.role === 'judge') { const p = await api('/judges/me/progress'); progress.value = p; if (contest.value) { const st = await api('/contests/' + contest.value.id + '/state'); perfs.value = st.performances || []; const cur = perfs.value.find(x => x.status === 'performing'); if (cur && (!curPerf.value || curPerf.value.id !== cur.id)) await openPerf(cur.id, true); } }
+          else if (user.value.role === 'judge') { const p = await api('/judges/me/progress'); progress.value = p; if (contest.value) { const st = await api('/contests/' + contest.value.id + '/state'); perfs.value = st.performances || []; const cur = perfs.value.find(x => x.status === 'performing') || perfs.value.find(x => x.status === 'scoring'); if (cur && (!curPerf.value || curPerf.value.id !== cur.id)) await openPerf(cur.id, true); } }
           else if (contest.value && tab.value === 'dash') { const st = await api('/contests/' + contest.value.id + '/state'); perfs.value = st.performances || []; await loadMatrix(); }
         } catch (e) {}
       }, 4000);
@@ -146,7 +146,7 @@ createApp({
           if (m.type === 'timer.sync') { timerInfo[m.performance_id] = m; }
           if (['performance.started', 'performance.ended', 'performance.locked', 'performance.revealed', 'score.updated', 'leaderboard.updated', 'contest.state', 'penalty.updated'].includes(m.type)) {
             if (user.value && user.value.role === 'mc') await loadPublic();
-            else if (user.value && user.value.role === 'judge' && m.type === 'performance.started') { await loadJudge(); }
+            else if (user.value && user.value.role === 'judge' && ['performance.started', 'performance.ended'].includes(m.type)) { await loadJudge(); }
             else if (contest.value && user.value && user.value.role === 'admin' && tab.value === 'dash') { const st = await api('/contests/' + contest.value.id + '/state'); perfs.value = st.performances || []; await loadMatrix(); for (const rd of rounds.value) await loadBoard(rd.id); }
           }
         };
@@ -466,24 +466,26 @@ createApp({
         <div class="card" v-if="progress">
           <h2>Tiến độ của tôi — Đã nộp: {{ progress.submitted }}/{{ progress.total }} đội</h2>
           <div class="flex"><button v-for="it in progress.items" :key="it.performance_id" :class="{secondary:true}" @click="openPerf(it.performance_id)">
-            {{ it.team_code }} · <span class="badge" :class="it.my_status">{{ it.my_status === 'submitted' ? 'Đã nộp' : (it.my_status === 'draft' ? 'Đang chấm dở' : 'Chưa chấm') }}</span></button></div>
+            <span v-if="it.performance_status==='performing'">🔴 ĐANG THI · </span>{{ it.team_code }} · <span class="badge" :class="it.my_status">{{ it.my_status === 'submitted' ? 'Đã nộp' : (it.my_status === 'draft' ? 'Đang chấm dở' : 'Chưa chấm') }}</span></button></div>
         </div>
         <div class="card" v-if="curPerf">
           <h2>{{ curPerf.team_code }} — {{ curPerf.team_name_vi }} <span class="badge">{{ curPerf.status }}</span></h2>
           <p class="muted">Trạng thái đồng bộ: <b>{{ syncStatus || scoreMeta.status || '—' }}</b> · version: {{ scoreMeta.version }}</p>
+          <p v-if="assignedPerfIds.has(curPerf.id) && curPerf.status==='pending'"><span class="badge">⏳ CHƯA TỚI LƯỢT THI</span> Đội này chưa bắt đầu thi — chỉ chấm được khi Admin bấm "Bắt đầu thi" cho đội này. Form dưới đây chỉ để xem trước tiêu chí.</p>
+          <p v-if="assignedPerfIds.has(curPerf.id) && (curPerf.status==='locked' || curPerf.status==='revealed')"><span class="badge">🔒 ĐÃ KHÓA ĐIỂM</span> Phần thi này đã khóa/công bố — chỉ xem, không sửa được nữa.</p>
           <div v-if="assignedPerfIds.has(curPerf.id)">
             <div v-for="c in flatCriteria(false)" :key="c.id" class="card">
               <b>{{ pick(c,'name') }}</b> <span class="muted">({{ c.group_name }}) · tối đa {{ c.max_score }}<span v-if="c.weight!==1"> · ×{{ c.weight }}</span></span>
               <div v-if="c.input_type==='range'" class="flex">
-                <input type="range" :min="c.min_score" :max="c.max_score" :step="c.step" v-model.number="formDetails[c.id]" @input="onDetailChange">
-                <input type="number" :min="c.min_score" :max="c.max_score" :step="c.step" v-model.number="formDetails[c.id]" @change="onDetailChange" style="width:100px">
+                <input type="range" :min="c.min_score" :max="c.max_score" :step="c.step" v-model.number="formDetails[c.id]" @input="onDetailChange" :disabled="curPerf.status!=='performing' && curPerf.status!=='scoring'">
+                <input type="number" :min="c.min_score" :max="c.max_score" :step="c.step" v-model.number="formDetails[c.id]" @change="onDetailChange" style="width:100px" :disabled="curPerf.status!=='performing' && curPerf.status!=='scoring'">
               </div>
               <div v-else class="flex">
-                <button v-for="o in c.options" :key="o.id" class="opt" :class="{sel: formOption[c.id]===o.id}" @click="formOption[c.id]=o.id; formDetails[c.id]=o.score_value; onDetailChange()">{{ pick(o,'label') }} = {{ o.score_value }}</button>
+                <button v-for="o in c.options" :key="o.id" class="opt" :class="{sel: formOption[c.id]===o.id}" :disabled="curPerf.status!=='performing' && curPerf.status!=='scoring'" @click="formOption[c.id]=o.id; formDetails[c.id]=o.score_value; onDetailChange()">{{ pick(o,'label') }} = {{ o.score_value }}</button>
               </div>
             </div>
-            <input v-model="formComment" placeholder="Ghi chú phiếu điểm" style="width:100%" @change="onDetailChange">
-            <div class="flex">
+            <input v-model="formComment" placeholder="Ghi chú phiếu điểm" style="width:100%" @change="onDetailChange" :disabled="curPerf.status!=='performing' && curPerf.status!=='scoring'">
+            <div class="flex" v-if="curPerf.status==='performing' || curPerf.status==='scoring'">
               <button class="secondary" @click="judgeSave(false)">{{ t.saveDraft }}</button>
               <button @click="judgeSave(true)">{{ t.submit }}</button>
               <button v-if="scoreMeta.status==='submitted'" class="warn" @click="judgeEditSubmitted">Sửa điểm đã nộp (cần lý do)</button>
@@ -499,7 +501,7 @@ createApp({
         <div class="card center" v-if="publicState">
           <h1>{{ pick(publicState.contest,'name') }}</h1>
           <div v-if="publicState.current_performance">
-            <p class="muted">{{ t.current }}</p>
+            <p><span class="badge" style="font-size:1.1rem">🔴 {{ t.current }}</span></p>
             <h2 style="font-size:2rem">{{ publicState.current_performance.team_code }} — {{ pick(publicState.current_performance,'team_name') }}</h2>
             <div class="big">{{ fmt(((timerInfo[publicState.current_performance.id]||{}).overtime_sec>0) ? (timerInfo[publicState.current_performance.id]||{}).overtime_sec : ((timerInfo[publicState.current_performance.id]||{}).remaining_sec!=null ? (timerInfo[publicState.current_performance.id]).remaining_sec : publicState.current_performance.remaining_sec)) }}</div>
             <p v-if="((timerInfo[publicState.current_performance.id]||{}).overtime_sec>0)">⏰ ĐANG LỐ GIỜ</p>
